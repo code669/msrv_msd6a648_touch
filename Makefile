@@ -3,8 +3,8 @@ SOURCES= main.cpp  msrv_msd6a648_touch.cpp
 
 LINUX_SRC = $(SOURCES)
 LINUX_APP = msrv_msd6a648_touch
-CC=g++
-#CC=aarch64-linux-gnu-g++
+#CC=g++
+CC=aarch64-linux-gnu-g++
 
 all: $(LINUX_APP)
 

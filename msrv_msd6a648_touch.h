@@ -65,7 +65,7 @@ using namespace std;
 #define DEFAULT_DEVICE   "/dev/ttyUSB0"
 #define DEFAULT_BAUD_RATE   921600
 #else
-#define DEFAULT_DEVICE     "/dev/ttyS1"
+#define DEFAULT_DEVICE     "/dev/ttyS2"
 #define DEFAULT_BAUD_RATE   115200
 #endif
 
@@ -124,6 +124,7 @@ public:
     //******************************************************************
     //读写HID驱动设备
     int hid_device_open();
+    void hid_device_close(int hid_device);
     int hid_device_write(int device_fd,uint8_t *cmd);
     int hid_device_read(int device_fd,uint8_t *rvbuf);
     //校验解析hid触摸数据
