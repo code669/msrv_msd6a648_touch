@@ -28,7 +28,7 @@
 
 #include <iostream>
 using namespace std;
-
+#include "ffprotocol_info.h"
 //************************************************************************************************
 #define DBG_UART_PRT   1
 
@@ -74,8 +74,8 @@ using namespace std;
 #define UNUSED(expr) do { (void)(expr); } while (0)
 
 //************************************************************************************************
-static unsigned char  usb_hid_off_command[64]={6,6,6,0};
-static unsigned char  usb_hid_on_command[64]={6,6,6,1};
+static uint8_t  usb_hid_off_command[64]={6,6,6,0};
+static uint8_t  usb_hid_on_command[64]={6,6,6,1};
 
 //************************************************************************************************
 class MSRV_MSD6A648_TOUCH
@@ -86,8 +86,9 @@ public:
     static  MSRV_MSD6A648_TOUCH* GetInstance();
     static  void DestoryInstance();
     //公共函数接口
-	char*convert_hex_to_str(unsigned char *pBuf, const int nLen);
+    char*convert_hex_to_str(uint8_t *pBuf, const int nLen);
     void sleep_ms(unsigned int msec);
+    int m_strlen(uint8_t *s);
     //***********************************************************
     //termios操作
     void show_termios(const struct termios *s);
@@ -123,12 +124,13 @@ public:
     //******************************************************************
     //读写HID驱动设备
     int hid_device_open();
-    int hid_device_write(int device_fd,unsigned char *cmd);
-    int hid_device_read(int device_fd,unsigned char *rvbuf);
+    int hid_device_write(int device_fd,uint8_t *cmd);
+    int hid_device_read(int device_fd,uint8_t *rvbuf);
     //校验解析hid触摸数据
-    int check_incoming_data(unsigned char* rvbuf,int len);
-    void handle_incoming_data(unsigned char*rvbuf,int len);
-
+    int check_incoming_data(uint8_t* rvbuf,int len);
+    void handle_incoming_data(uint8_t*rvbuf,int len);
+    Report_touch_info *get_report_info(uint8_t *rvbuf,int len);
+    void transfer_report_info_to_uart(Report_touch_info *info);
 
     //******************************************************************
     //外部调用启动接口

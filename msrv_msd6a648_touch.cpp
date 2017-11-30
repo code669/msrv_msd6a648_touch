@@ -9,7 +9,7 @@ enum{
 
 static int uart_tty_fd = -1;
 static int usb_hid_fd =-1;
-unsigned char m_rvbuf[1024]={0,};//全局接收数据
+uint8_t g_rvbuf[1024]={0,};//全局接收数据
 
 MSRV_MSD6A648_TOUCH*MSRV_MSD6A648_TOUCH::m_pInstance=NULL;
 
@@ -41,7 +41,7 @@ void MSRV_MSD6A648_TOUCH::DestoryInstance()
         m_pInstance =NULL;
     }
 }
-char* MSRV_MSD6A648_TOUCH::convert_hex_to_str(unsigned char *pBuf, const int nLen)
+char* MSRV_MSD6A648_TOUCH::convert_hex_to_str(uint8_t *pBuf, const int nLen)
 {
 	static char    acBuf[20000]    = {0,};
 	char           acTmpBuf[10]    = {0,};
@@ -121,7 +121,7 @@ void MSRV_MSD6A648_TOUCH::start()
 void *MSRV_MSD6A648_TOUCH::Run(void *arg)
 {
     MSRV_MSD6A648_TOUCH *msrv = (MSRV_MSD6A648_TOUCH*)arg;
-    unsigned char rvbuf[1024]={0};
+    uint8_t m_rvbuf[64]={0};
     int usb_hid =-1;
     usb_hid = msrv->hid_device_open();
     if(usb_hid<0)
@@ -142,14 +142,40 @@ void *MSRV_MSD6A648_TOUCH::Run(void *arg)
     while (1)
     {
         //校验从HID接收的数据
-        //处理接收到的合法数据
-        int size = msrv->hid_device_read(usb_hid_fd,rvbuf);
+#if 1
+       int buflen = msrv->check_incoming_data(m_rvbuf,sizeof(m_rvbuf));
+       if(buflen==0)
+       {
+            ;
+       }
+       else if(buflen==sizeof(m_rvbuf))
+       {
+           //处理接收到的合法数据
+            msrv->handle_incoming_data(m_rvbuf,buflen);
+            #if 1
+            HHT_LOG_DEBUG("read data from hid drv: \n");
+            for (int i = 0; i < buflen; i++)
+            {
+                printf("%02x ", m_rvbuf[i]);
+                if ((i % 16) == 15)
+                    printf("\n");
+            }
+            #endif
+            memset(m_rvbuf,0,sizeof(m_rvbuf));
+       }
+       else
+       {
+          HHT_LOG_ERROR("incoming data len: [%d]\n",buflen);
+          memset(m_rvbuf,0,sizeof(m_rvbuf));
+       }
+#else
+        int size = msrv->hid_device_read(usb_hid_fd,m_rvbuf);
         if(size >0)
         {
             HHT_LOG_DEBUG("read data from hid drv: \n");
             for (int i = 0; i < size; i++)
             {
-                printf("%02x ", rvbuf[i]);
+                printf("%02x ", m_rvbuf[i]);
                 if ((i % 16) == 15)
                     printf("\n");
             }
@@ -157,12 +183,13 @@ void *MSRV_MSD6A648_TOUCH::Run(void *arg)
             //-------------------------------------------------------
             //解析将数据通过串口发送只MCU
 
-            memset(rvbuf,0,sizeof(rvbuf));
+            memset(m_rvbuf,0,sizeof(m_rvbuf));
         }
         else
         {
             ;
         }
+#endif
         msrv->sleep_ms(200);
     }
     return ((void*)0);
@@ -175,26 +202,61 @@ int MSRV_MSD6A648_TOUCH::hid_device_open()
     return usb_hid_fd;
 }
 
-int MSRV_MSD6A648_TOUCH::hid_device_write(int device_fd,unsigned char *cmd)
+int MSRV_MSD6A648_TOUCH::hid_device_write(int device_fd,uint8_t *cmd)
 {
     int size = write(device_fd,cmd,sizeof(cmd));
     return size;
 }
 
-int MSRV_MSD6A648_TOUCH::hid_device_read(int device_fd,unsigned char *rvbuf)
+int MSRV_MSD6A648_TOUCH::hid_device_read(int device_fd,uint8_t *rvbuf)
 {
     int size = read(device_fd,rvbuf,sizeof(rvbuf));
     return size;
 }
 
-int MSRV_MSD6A648_TOUCH::check_incoming_data(unsigned char *rvbuf, int len)
+int MSRV_MSD6A648_TOUCH::check_incoming_data(uint8_t *rvbuf, int len)
 {
     //校验从HID接收的一帧数据
+    int nbr_received_bytes = 0;
+    nbr_received_bytes = read(usb_hid_fd,rvbuf,len);
+
+    return nbr_received_bytes;
 }
 
-void MSRV_MSD6A648_TOUCH::handle_incoming_data(unsigned char *rvbuf, int len)
+void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
 {
     //梳理从HID接收到的数据,通过串口发送一帧数据给MCU
+     Report_touch_info *m_info =get_report_info(rvbuf,len);
+     transfer_report_info_to_uart(m_info);
+     return;
+}
+
+Report_touch_info *MSRV_MSD6A648_TOUCH::get_report_info(uint8_t *rvbuf, int len)
+{
+    //rvbuf为64bytes完整一帧数据
+    Report_touch_info *m_report;
+    m_report = (struct _Report_touch_info*)malloc(sizeof(struct _Report_touch_info));
+    memset(m_report,0,sizeof(struct _Report_touch_info));
+    m_report->report_id =rvbuf[0];
+    int i;
+    for(i=0;i<MAX_POINTS_PER_FRAME;i++)
+    {
+        Touch_point_info *info =(struct _Touch_point_info*)(&rvbuf[i*10+1]);
+        memcpy(&m_report[i],info,sizeof(struct _Touch_point_info));
+        HHT_LOG_DEBUG("====>point[%d]: %s\n",i,convert_hex_to_str(&rvbuf[i*10+1],10));
+    }
+    m_report->nr = rvbuf[10*(i+1)+1];
+
+    HHT_LOG_DEBUG("====>report->nr:[0x%02x]\n",m_report->nr);
+
+    memcpy(m_report->reserved,&rvbuf[10*(i+1)+2],2);
+
+    return m_report;
+}
+
+void MSRV_MSD6A648_TOUCH::transfer_report_info_to_uart(Report_touch_info *info)
+{
+    write(uart_tty_fd,info,sizeof(Report_touch_info));
 }
 
 
@@ -204,6 +266,17 @@ void MSRV_MSD6A648_TOUCH::sleep_ms(unsigned int msec)
     tval.tv_sec = msec/1000;
     tval.tv_usec = (msec*1000)%1000000;
     select(0,NULL,NULL,NULL,&tval);
+}
+
+int MSRV_MSD6A648_TOUCH::m_strlen(uint8_t *s)
+{
+    int i=0;
+    while(*s!='\0')
+    {
+        i++;
+        s++;
+    }
+    return i;
 }
 
 void MSRV_MSD6A648_TOUCH::show_termios(const termios *s)
