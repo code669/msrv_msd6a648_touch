@@ -29,6 +29,8 @@
 #include <iostream>
 using namespace std;
 #include "ffprotocol_info.h"
+#include "commands_def.h"
+#include "hid-tp-coords-ops.h"
 //************************************************************************************************
 #define DBG_UART_PRT   1
 
@@ -86,7 +88,7 @@ public:
     static  MSRV_MSD6A648_TOUCH* GetInstance();
     static  void DestoryInstance();
     //公共函数接口
-    char*convert_hex_to_str(uint8_t *pBuf, const int nLen);
+    char*convert_hex_to_str(uint8_t *pBuf, const int nLen,const bool isHex);
     void sleep_ms(unsigned int msec);
     int m_strlen(uint8_t *s);
     //***********************************************************
@@ -132,13 +134,18 @@ public:
     void handle_incoming_data(uint8_t*rvbuf,int len);
     Report_touch_info *get_report_info(uint8_t *rvbuf,int len);
     void transfer_report_info_to_uart(Report_touch_info *info);
-
+    //******************************************************************
+    void write_sndbuf_to_uart(const char *Byte, int num);
+    bool trans_hht_touch_w_h_pos(trans_point_data frame);
     //******************************************************************
     //外部调用启动接口
     void start();
 private:
     static  MSRV_MSD6A648_TOUCH *m_pInstance;
     static  void *Run(void*arg);
+    int m_touch_panel_type;// 触摸面板类型
+    int nseqlocal;//
+    int nptlocal; //
     pthread_t m_pthread;
 };
 

@@ -8,5 +8,7 @@ SOURCES += main.cpp \
 
 HEADERS += \
     msrv_msd6a648_touch.h \
-    ffprotocol_info.h
+    ffprotocol_info.h \
+    commands_def.h \
+    hid-tp-coords-ops.h
 

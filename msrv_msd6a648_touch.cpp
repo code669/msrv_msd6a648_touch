@@ -1,5 +1,7 @@
 #include "msrv_msd6a648_touch.h"
 
+static int g_points = 0;//触摸点个数
+
 enum{
     U_MODE_FULL_422 = 0,
     U_MODE_HALF_485 = 1,
@@ -16,6 +18,9 @@ MSRV_MSD6A648_TOUCH*MSRV_MSD6A648_TOUCH::m_pInstance=NULL;
 MSRV_MSD6A648_TOUCH::MSRV_MSD6A648_TOUCH()
 {
     memset(&m_pthread, 0, sizeof(pthread_t));
+    nseqlocal =0;
+    nptlocal = 0;
+    m_touch_panel_type = defTouchPanelHht;
 }
 
 MSRV_MSD6A648_TOUCH::~MSRV_MSD6A648_TOUCH()
@@ -42,7 +47,7 @@ void MSRV_MSD6A648_TOUCH::DestoryInstance()
         m_pInstance =NULL;
     }
 }
-char* MSRV_MSD6A648_TOUCH::convert_hex_to_str(uint8_t *pBuf, const int nLen)
+char *MSRV_MSD6A648_TOUCH::convert_hex_to_str(uint8_t *pBuf, const int nLen,const bool isHex)
 {
 	static char    acBuf[20000]    = {0,};
 	char           acTmpBuf[10]    = {0,};
@@ -65,8 +70,14 @@ char* MSRV_MSD6A648_TOUCH::convert_hex_to_str(uint8_t *pBuf, const int nLen)
 
 	for(ulIndex=0; ulIndex<ulBufLen; ulIndex++)
 	{
-		//snprintf(acTmpBuf, sizeof(acTmpBuf), "0x%02X ", *(pBuf + ulIndex));
-		snprintf(acTmpBuf, sizeof(acTmpBuf), "%02X ", *(pBuf + ulIndex));
+        if(isHex)
+        {
+            snprintf(acTmpBuf, sizeof(acTmpBuf), "%04X ", *(pBuf + ulIndex));
+        }
+        else
+        {
+            snprintf(acTmpBuf, sizeof(acTmpBuf), "%02X ", *(pBuf + ulIndex));
+        }
 		strcat(acBuf, acTmpBuf);
 	}
 	return acBuf;
@@ -240,6 +251,7 @@ int MSRV_MSD6A648_TOUCH::check_incoming_data(uint8_t *rvbuf, int len)
 void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
 {
     //梳理从HID接收到的数据,通过串口发送一帧数据给MCU
+#if 0
      Report_touch_info *m_info =get_report_info(rvbuf,len);
      transfer_report_info_to_uart(m_info);
      if (m_info != NULL) //必须释放先前开辟的内存空间
@@ -247,6 +259,71 @@ void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
          free(m_info);
          m_info = NULL;
      }
+#else
+    Report_touch_info *m_info = get_report_info(rvbuf, len);
+    trans_point_data *m_data ;
+    m_data = (struct _trans_point_data*)malloc(sizeof(struct _trans_point_data));
+    memset(m_data,0,sizeof(struct _trans_point_data));
+
+    for (int i = 0; i < MAX_POINTS_PER_FRAME; i++)
+    {
+        if ((m_info->m_touch_points[i].touch_id==0x00)&&
+            (m_info->m_touch_points[i].touch_status==0x00)&&
+            (m_info->m_touch_points[i].touch_xpos==0x00)&&
+            (m_info->m_touch_points[i].touch_ypos==0x00)&&
+            (m_info->m_touch_points[i].touch_width==0x00)&&
+            (m_info->m_touch_points[i].touch_height==0x00))
+            {
+                ;
+            }
+            else
+            {
+                g_points++;
+            }
+    }
+
+    //m_data->type = defTypeTouch;
+    m_data->type = TYPE_TOUCH;
+    m_data->npt  = g_points ;//触摸点个数
+    HHT_LOG_DEBUG("***************************************************************************************\n");
+    HHT_LOG_DEBUG("------------->m_data->type[0x%04x]\n",m_data->type);
+    HHT_LOG_DEBUG("------------->m_data->npt [0x%04x]\n", m_data->npt);
+    for(int i=0;i<g_points;i++)
+    {
+        m_data->un_data.touch.item[i].penid = m_info->m_touch_points[i].touch_id;
+        m_data->un_data.touch.item[i].status = m_info->m_touch_points[i].touch_status;
+        m_data->un_data.touch.item[i].x_ops = m_info->m_touch_points[i].touch_xpos;
+        m_data->un_data.touch.item[i].y_ops = m_info->m_touch_points[i].touch_ypos;
+        m_data->un_data.touch.item[i].w = m_info->m_touch_points[i].touch_width;
+        m_data->un_data.touch.item[i].h = m_info->m_touch_points[i].touch_height;
+        m_data->un_data.touch.item[i].p = 0;
+        m_data->un_data.touch.item[i].r = 0;
+#if 0
+        HHT_LOG_DEBUG("------------->hht_point[%d]: %04x %04x %04x %04x %04x %04x %04x %04x\n", i, m_data->un_data.touch.item[i].penid,
+                      m_data->un_data.touch.item[i].status, m_data->un_data.touch.item[i].x_ops, m_data->un_data.touch.item[i].y_ops,
+                      m_data->un_data.touch.item[i].w, m_data->un_data.touch.item[i].h, m_data->un_data.touch.item[i].p, m_data->un_data.touch.item[i].r);
+#else
+        HHT_LOG_DEBUG("------------->hht_point[%d]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n", i, m_info->m_touch_points[i].touch_id,
+                      m_info->m_touch_points[i].touch_status, m_info->m_touch_points[i].touch_xpos, m_info->m_touch_points[i].touch_ypos,
+                      m_info->m_touch_points[i].touch_width, m_info->m_touch_points[i].touch_height, m_data->un_data.touch.item[i].p, m_data->un_data.touch.item[i].r);
+#endif
+    }
+    HHT_LOG_DEBUG("***************************************************************************************\n");
+    //发送数据给串口
+    trans_hht_touch_w_h_pos(*m_data);
+
+    if (m_data != NULL) //必须释放先前开辟的内存空间
+    {
+        free(m_data);
+        m_data =NULL;
+    }
+    if (m_info != NULL) //必须释放先前开辟的内存空间
+    {
+        free(m_info);
+        m_info =NULL;
+    }
+    g_points = 0;//发送完立即清零
+#endif
      return;
 }
 
@@ -257,23 +334,210 @@ Report_touch_info *MSRV_MSD6A648_TOUCH::get_report_info(uint8_t *rvbuf, int len)
     m_report = (struct _Report_touch_info*)malloc(sizeof(struct _Report_touch_info));
     memset(m_report,0,sizeof(struct _Report_touch_info));
     m_report->report_id =rvbuf[0];
-    HHT_LOG_DEBUG("\n====>report->report_id:[0x%02x]\n", m_report->report_id);
+    HHT_LOG_DEBUG("\n====>report->report_id:[0x%04x]\n", m_report->report_id);
+#if 1
     int i;
     for(i=0;i<MAX_POINTS_PER_FRAME;i++)
     {
         Touch_point_info *info = (struct _Touch_point_info*)(&rvbuf[i*10+1]);
-        memcpy(&m_report[i],info,sizeof(struct _Touch_point_info));
-        HHT_LOG_DEBUG("\n====>point[%d]: %s\n",i,convert_hex_to_str(&rvbuf[i*10+1],10));
+        memcpy(&m_report->m_touch_points[i], info, sizeof(struct _Touch_point_info));
+        //HHT_LOG_DEBUG("\n====>point[%d]: %s\n",i,convert_hex_to_str(&rvbuf[i*10+1],10,true));
+        HHT_LOG_DEBUG("\n====>point[%d]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x \n", i, info->touch_id,
+                      info->touch_status, info->touch_xpos, info->touch_ypos,
+                      info->touch_width, info->touch_height);
     }
-
     m_report->nr = rvbuf[10*(i)+1];
     
-    HHT_LOG_DEBUG("\n====>report->nr:[0x%02x]\n",m_report->nr);
+    HHT_LOG_DEBUG("\n====>report->nr:[0x%04x]\n",m_report->nr);
 
     memcpy(m_report->reserved,&rvbuf[10*(i)+2],2);
 
-    HHT_LOG_DEBUG("\n====>report->reserved:[0x%02x 0x%02x]\n", rvbuf[10*(i)+2], rvbuf[10*(i)+3]);
+    HHT_LOG_DEBUG("\n====>report->reserved:[0x%04x 0x%04x]\n", rvbuf[10*(i)+2], rvbuf[10*(i)+3]);
+#else
+    
+
+#endif
     return m_report;
+}
+
+void MSRV_MSD6A648_TOUCH::write_sndbuf_to_uart(const char *Byte, int num) 
+{
+    if (uart_tty_fd >= 0)
+    {
+        int nlen = write(uart_tty_fd, (const Uint8 *)Byte, num);
+        HHT_LOG_DEBUG("====>write sndbuf to mcu: \n%s\n", convert_hex_to_str((uint8_t *)Byte, num,false));
+        //HHT_LOG_DEBUG("rdl_002;write_sndbuf_to_uart;nlen=%d;num=%d;fduart=%d\n",nlen,num,fduart);
+        if (nlen != num)
+        {
+            //HHT_LOG_DEBUG("rdl_002;write_sndbuf_to_uart;nlen=%d;num=%d;fduart=%d\n",nlen,num,fduart);
+        }
+    }
+    else
+    {
+        //HHT_LOG_DEBUG("rdl_002;write_sndbuf_to_uart;fduart=%d\n",fduart);
+    }
+}
+
+bool iseven = true;
+bool MSRV_MSD6A648_TOUCH::trans_hht_touch_w_h_pos(trans_point_data frame)
+{
+#if 1
+	bool is_has_up = false;
+	COMMAND_TAILER *ptailer;
+
+	CMD_UART_HEAD *phead;
+	char bufuart[2 + sizeof(CMD_UART_HEAD) + sizeof(uart_touch_w_h_pt) * MAX_POINT_COUNT + sizeof(COMMAND_TAILER)];
+
+	memset(bufuart, 0x00, sizeof(bufuart));
+	//HHT_LOG_DEBUG("rdl_002;id=%d,status=%d,absx=%d,absy=%d\n",
+	//		 stpoint.penid, stpoint.status, stpoint.x, stpoint.y);
+	//HHT_LOG_DEBUG("\n rdl_002;android_pc_switch fdhhtouch is ok;n=%d\n",n);
+	/*
+	   uart_touch_frame uart_frame;
+	   uart_frame.cmd[0]=0xFE;
+	   uart_frame.cmd[1]=0xF1;
+	   uart_frame.type=0x01;
+	   uart_frame.npt=frame.npt;
+	 */
+	//char bufuart[128];
+	phead = (CMD_UART_HEAD *)&bufuart[0];
+	phead->headflag.header = CMD_HEADER;
+	phead->body.cmd_length = 2 + sizeof(COMMAND_UART_BODY) + sizeof(uart_touch_w_h_pt) * frame.npt;
+	//phead->body.cmd_seq = get_add_uart_seqno();
+	phead->body.cmd_seq = nseqlocal++;//yangqain
+	phead->body.src = CMD_TARGET_ANDROID;
+	phead->body.dst = CMD_TARGET_MCU;
+	phead->body.pipe = CMD_PIPE_UART;
+
+	//ruandelu 20170205 w/h not transfer bgn
+	//phead->body.cmd=CMD_TOUCH_W_H_DATA;
+	phead->body.cmd = CMD_TOUCH_DATA;
+	//ruandelu 20170205 w/h not transfer end
+
+	touch_point *pt;
+	int i;
+	uart_touch_w_h_pt uart_w_h_pt;
+
+	bufuart[sizeof(CMD_UART_HEAD)] = frame.npt;
+	//bool blup=false;
+	for (i = 0; i < frame.npt; i++)
+	{
+		pt = &frame.un_data.touch.item[i];
+		//
+
+		//sprintf((char*)buf,"%2d %2d %5d %5d;",pt->penid, pt->status, pt->x, pt->y);
+		//write_sndbuf_to_uart((U8*)buf, strlen((char*)buf));
+
+		uart_w_h_pt.id = pt->penid;
+		//HHT_LOG_DEBUG("%s;%s;%d;status=%d;id=%d;x=%d;y=%d\n",__FILE__,__func__,__LINE__
+		//		,pt->status, pt->penid, pt->x, pt->y);
+
+		//printf("%s;%s;%d;status=%d;id=%d;x=%d;y=%d\n",__FILE__,__func__,__LINE__
+		//		,pt->status, pt->penid, pt->x, pt->y);
+
+#if 1
+		//ruandelu 20150130 add for honghe touch
+		//ruandelu 20150826 ops coords bgn
+
+		//printf("rdl_pos_002;%s;%s;%d;defTouchPanelHht=%d;m_touch_panel_type=%d\n"
+		//	,__FILE__,__func__,__LINE__,defTouchPanelHht,m_touch_panel_type);
+		if (defTouchPanelHht == m_touch_panel_type)
+		{
+			uart_w_h_pt.x = pt->x_ops;
+			uart_w_h_pt.y = pt->y_ops;
+			//printf("rdl_pos_002;%s;%s;%d;x_a=%d;x=%d\n"
+			//,__FILE__,__func__,__LINE__,pt->x_android,pt->x);
+		}
+		//ruandelu 20151010 IR flat frog bgn
+		//ruandelu 20151103 touch position ops only 1/4
+		else if (defTouchPanelFlatFrog == m_touch_panel_type)
+		{
+#if 1
+			uart_w_h_pt.x = pt->x_ops * 32767 / 19354;
+			uart_w_h_pt.y = pt->y_ops * 32767 / 10886;
+#endif
+#if 0
+			uart_pt.x=pt->x*32767/30321;
+			uart_pt.y=pt->y*32767/17055;
+#endif
+		}
+		else if (defTPFlatFrog2F == m_touch_panel_type)
+		{
+#if 0
+			uart_pt.x=pt->x*32767/19354;
+			uart_pt.y=pt->y*32767/10886;
+#endif
+#if 1
+			uart_w_h_pt.x = pt->x_ops * 32767 / 30321;
+			uart_w_h_pt.y = pt->y_ops * 32767 / 17055;
+#endif
+		}
+		else //sharp
+		{
+			uart_w_h_pt.x = pt->x_ops * 32767 / 15360;
+			uart_w_h_pt.y = pt->y_ops * 32767 / 8640;
+		}
+		//ruandelu 20151010 IR flat frog end
+		//ruandelu 20150826 ops coords end
+#endif
+		//ruandelu 20170205 w/h not transfer bgn
+		uart_w_h_pt.w=pt->w;
+		uart_w_h_pt.h=pt->h;
+		//ruandelu 20170205 w/h not transfer end
+
+		//HHT_LOG_DEBUG("%s;%s;%d;status=%d;id=%d;x=%d;y=%d\n",__FILE__,__func__,__LINE__
+		//		,uart_pt.status,uart_pt.id,uart_pt.x,uart_pt.y);
+
+		if (pt->status == 0)
+		{
+			is_has_up = true;
+			uart_w_h_pt.status = 3; //pt->status;
+			//HHT_LOG_DEBUG("%s;%s;%d;status=%d;id=%d;x=%d;y=%d\n",__FILE__,__func__,__LINE__
+			//		        ,uart_pt.status,uart_pt.id,uart_pt.x,uart_pt.y);
+		}
+		else
+			uart_w_h_pt.status = pt->status;
+		memcpy(&bufuart[1 + sizeof(CMD_UART_HEAD) + i * sizeof(uart_touch_w_h_pt)], &uart_w_h_pt, sizeof(uart_touch_w_h_pt));
+	}
+
+	ptailer = (COMMAND_TAILER *)&bufuart[2 + sizeof(CMD_UART_HEAD) + sizeof(uart_touch_w_h_pt) * frame.npt];
+	ptailer->body_checksum = 0x00;
+
+	for (i = 0; i < phead->body.cmd_length; i++)
+	{
+		ptailer->body_checksum += bufuart[sizeof(COMMAND_HEADER) + i];
+	}
+
+	ptailer->tailer = CMD_TAILER;
+
+	//sprintf((char*)buf,"%s","\r\n");
+	//write_sndbuf_to_uart((U8*)buf, strlen((char*)buf));
+
+#if 1
+	nptlocal += frame.npt;
+	if (nptlocal % 100 == 0)
+	{
+		HHT_LOG_DEBUG("%s;%s;%d;nptlocal=%d;x=%d;y=%d;;\n", __FILE__, __func__, __LINE__, nptlocal, uart_w_h_pt.x, uart_w_h_pt.y);
+	}
+#endif
+
+	if (frame.npt <= 4 || (is_has_up == true || iseven == true))
+	{
+#if DBG_TP_PROXY
+		if ((nreadposcount % 100) == 0)
+		{
+			printf("rdl_pos;%s;%s;%d;%08X;nreadposcount=%d\n", __FILE__, __func__, __LINE__, _n_cur_switch_usb, nreadposcount);
+		}
+#endif
+
+		write_sndbuf_to_uart(bufuart, (int)(2 + sizeof(CMD_UART_HEAD) + sizeof(uart_touch_w_h_pt) * frame.npt + sizeof(COMMAND_TAILER)));
+		iseven = false;
+	}
+	else
+		iseven = true;
+
+	return true;
+#endif
 }
 
 void MSRV_MSD6A648_TOUCH::transfer_report_info_to_uart(Report_touch_info *info)
