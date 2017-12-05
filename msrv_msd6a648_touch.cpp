@@ -152,9 +152,10 @@ void *MSRV_MSD6A648_TOUCH::Run(void *arg)
     //写入指令
     msrv->hid_device_write(usb_hid_fd,usb_hid_off_command);
     HHT_LOG_DEBUG("send usb-off commands.\n");
+    msrv->sleep_ms(50);
     msrv->hid_device_write(usb_hid_fd,usb_hid_on_command);
     HHT_LOG_DEBUG("send usb-on commands.\n");
-
+    msrv->sleep_ms(100);
     while (1)
     {
         //校验从HID接收的数据

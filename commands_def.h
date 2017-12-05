@@ -241,7 +241,7 @@ typedef unsigned short Int16;
 #define CMD_BT_SECTOR_LEN		2048
 
 #define CMD_UART_MAX		0x7FFF
-
+//定义触摸框类型
 #define defTouchPanelSharp 1
 #define defTouchPanelHht   2
 #define defTouchPanelFlatFrog 3

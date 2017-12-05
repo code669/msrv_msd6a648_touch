@@ -16,11 +16,11 @@ $(LINUX_APP): $(LINUX_SRC)
 	$(CC) -pthread $^ -o $@ $(LDFLAGS) -static
 
 $(LINUX_SO):$(LINUX_SRC)
-	$(CC) -fpic -c msrv_msd6a648_touch.cpp
-	$(CC) -shared -fpic -o libmsrv_msd6a648_touch.so msrv_msd6a648_touch.o
+	$(CC) -fpic -c $(LINUX_SRC)
+	$(CC) -shared -fpic -o $(LINUX_SO) $(LINUX_APP).o
 
 $(LINUX_SA):$(LINUX_SRC)
-	$(AR) libmsrv_msd6a648_touch.a msrv_msd6a648_touch.o
+	$(AR) $(LINUX_SA) $(LINUX_APP).o
 
 install: all
 
