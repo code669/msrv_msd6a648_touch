@@ -25,7 +25,7 @@
 #include <ctime>
 #include <pthread.h>
 #include <string.h>
-
+#include <signal.h>
 #include <iostream>
 using namespace std;
 #include "ffprotocol_info.h"
@@ -91,6 +91,7 @@ public:
     char*convert_hex_to_str(uint8_t *pBuf, const int nLen,const bool isHex);
     void sleep_ms(unsigned int msec);
     int m_strlen(uint8_t *s);
+    static void signal_handler(int signal);
     //***********************************************************
     //termios操作
     void show_termios(const struct termios *s);
