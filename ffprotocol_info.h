@@ -36,8 +36,8 @@ typedef enum
 */
 typedef struct __attribute__((packed)) _Touch_point_info
 {
-       uint8_t  touch_id;
        uint8_t  touch_status;  //down/up
+       uint8_t  touch_id;
        uint16_t touch_xpos;
        uint16_t touch_ypos;
        uint16_t touch_width;
@@ -46,12 +46,12 @@ typedef struct __attribute__((packed)) _Touch_point_info
 
 typedef struct __attribute__((packed)) _Pen_point_info
 {
-       uint8_t  pen_id;
-       uint8_t  pen_status;  //down/up
-       uint16_t pen_xpos;
-       uint16_t pen_ypos;
-       uint16_t pen_width;
-       uint16_t pen_height;
+    uint8_t pen_status; //down/up
+    uint8_t pen_id;
+    uint16_t pen_xpos;
+    uint16_t pen_ypos;
+    uint16_t pen_width;
+    uint16_t pen_height;
 }Pen_point_info;
 
 typedef struct __attribute__((packed)) _Report_touch_info

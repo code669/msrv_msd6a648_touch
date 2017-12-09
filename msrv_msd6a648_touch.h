@@ -25,7 +25,7 @@
 #include <ctime>
 #include <pthread.h>
 #include <string.h>
-
+#include <signal.h>
 #include <iostream>
 using namespace std;
 #include "ffprotocol_info.h"
@@ -91,6 +91,7 @@ public:
     char*convert_hex_to_str(uint8_t *pBuf, const int nLen,const bool isHex);
     void sleep_ms(unsigned int msec);
     int m_strlen(uint8_t *s);
+    static void signal_handler(int sig);
     //***********************************************************
     //termios操作
     void show_termios(const struct termios *s);
@@ -143,10 +144,12 @@ public:
 private:
     static  MSRV_MSD6A648_TOUCH *m_pInstance;
     static  void *Run(void*arg);
+    static  void *WriteMCU(void *arg);
+    static  void *ReadBUF(void *arg);
     int m_touch_panel_type;// 触摸面板类型
     int nseqlocal;//
     int nptlocal; //
-    pthread_t m_pthread;
+    pthread_t m_pthread ,m_write_pthread,m_read_pthread;
 };
 
 #endif // MSRV_MSD6A648_TOUCH_H
