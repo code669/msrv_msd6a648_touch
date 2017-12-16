@@ -11,6 +11,7 @@ enum{
 
 static int uart_tty_fd = -1;
 static int usb_hid_fd =-1;
+static int uinp_fd = -1;
 uint8_t g_rvbuf[1024]={0,};//全局接收数据
 
 MSRV_MSD6A648_TOUCH*MSRV_MSD6A648_TOUCH::m_pInstance=NULL;
@@ -97,8 +98,202 @@ char *MSRV_MSD6A648_TOUCH::convert_hex_to_str(uint8_t *pBuf, const int nLen,cons
 	}
 	return acBuf;
 }
+u8 MSRV_MSD6A648_TOUCH::DoCalibration(u16 *xvalue, u16 *yvalue)
+{
+    u16 X,Y;
+    s64 X_X,Y_Y;
+    u16 k16[] = CUSTOM_CALIBRATION; 
+
+    X = *xvalue;
+    Y = *yvalue;
+    X_X = (s64)((s16)k16[0])*X/4096 + (s64)((s16)k16[1])*Y/4096 + 8*(s64)((s16)k16[2]);
+    Y_Y = (s64)((s16)k16[3])*X/4096 + (s64)((s16)k16[4])*Y/4096 + 8*(s64)((s16)k16[5]);
+    
+    if (X_X < 0)
+        X_X = 0;
+    if (X_X > 32767)
+        X_X = 32767;
+    if (Y_Y < 0)
+        Y_Y = 0;
+    if (Y_Y > 32767)
+        Y_Y = 32767;
+        
+    *xvalue = (u16)X_X;
+    *yvalue = (u16)Y_Y;
+    return 0;
+}
+int MSRV_MSD6A648_TOUCH::create_virtual_input_device(void)
+{
+    struct uinput_user_dev uinp;
+    uinp_fd = open("/dev/uinput",O_WRONLY|O_NDELAY);
+    if(uinp_fd <=0)
+    {
+        return -1;
+    }
+
+    memset(&uinp,0x00,sizeof(uinp));
+
+#if  1
+    strncpy(uinp.name,"IST-X TOUCHSCREEN MSD6A648",sizeof(uinp.name)-1);
+
+    uinp.id.vendor = 0x3697;
+    uinp.id.product=0x0003;
+    uinp.id.bustype = BUS_VIRTUAL;
+
+    //uinp.absmax[ABS_X] =0x7671;
+    uinp.absmax[ABS_X] =0x7fff;
+    uinp.absmin[ABS_X] = 0;
+    //uinp.absmax[ABS_Y] = 0x429f;
+    uinp.absmax[ABS_Y] = 0x7fff;
+    uinp.absmin[ABS_Y] = 0;
+    uinp.absmax[ABS_PRESSURE]= 15000;
+    uinp.absmin[ABS_PRESSURE]= 0;
+
+    //uinp.absmax[ABS_MT_POSITION_X] = 0x7671;
+    uinp.absmax[ABS_MT_POSITION_X] = 0x7fff;
+    uinp.absmin[ABS_MT_POSITION_X] = 0;
+    //uinp.absmax[ABS_MT_POSITION_Y] = 0x429f;
+    uinp.absmax[ABS_MT_POSITION_Y] = 0x7fff;
+    uinp.absmin[ABS_MT_POSITION_Y] = 0;
+    uinp.absmax[ABS_MT_TRACKING_ID] = 0xFFFF;
+    uinp.absmin[ABS_MT_TRACKING_ID] = 0;
+#endif
+
+    if(write(uinp_fd,&uinp,sizeof(uinp))<0)
+    {
+        close(uinp_fd);
+        return -2;
+    }
+    if(ioctl(uinp_fd,UI_SET_EVBIT,EV_KEY/*0x01*/)!=0)
+    {
+        close(uinp_fd);
+        return -3;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_EVBIT, EV_ABS) != 0)
+    {
+        close(uinp_fd);
+        return -4;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_EVBIT, EV_REL) != 0)
+    {
+        close(uinp_fd);
+        return -5;
+    }
+
+    if(ioctl(uinp_fd,UI_SET_KEYBIT, BTN_TOUCH) != 0)
+    {
+        close(uinp_fd);
+        return -6;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_KEYBIT, BTN_BACK) != 0)
+    {
+        close(uinp_fd);
+        return -7;
+    }
+
+    if(ioctl(uinp_fd,UI_SET_KEYBIT, BTN_TOOL_PEN) != 0)//
+    {
+        close(uinp_fd);
+        return -8;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_KEYBIT, BTN_TOOL_FINGER) != 0)//
+    {
+        close(uinp_fd);
+        return -9;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_KEYBIT, BTN_TOOL_RUBBER) != 0)
+    {
+        close(uinp_fd);
+        return -10;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_KEYBIT, BTN_STYLUS) != 0)
+    {
+        close(uinp_fd);
+        return -11;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_X) != 0)
+    {
+        close(uinp_fd);
+        return -12;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_Y) != 0)
+    {
+        close(uinp_fd);
+        return -13;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_MT_POSITION_X) != 0)
+    {
+        close(uinp_fd);
+        return -14;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_MT_POSITION_Y) != 0)
+    {
+        close(uinp_fd);
+        return -15;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_MT_TRACKING_ID) != 0)
+    {
+        close(uinp_fd);
+        return -16;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_MT_TOOL_TYPE) != 0)
+    {
+        close(uinp_fd);
+        return -17;
+    }
+
+    /********************/
+
+    if(ioctl(uinp_fd, UI_SET_RELBIT, REL_X) != 0)
+    {
+        close(uinp_fd);
+        return -18;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_RELBIT, REL_Y) != 0)
+    {
+        close(uinp_fd);
+        return -19;
+    }
+
+    if(ioctl(uinp_fd, UI_SET_ABSBIT, ABS_PRESSURE) != 0)
+    {
+        close(uinp_fd);
+        return -20;
+    }
+    int i;
+    for(i=0; i<0x1FF; i++)
+    {
+        ioctl(uinp_fd, UI_SET_KEYBIT, i);
+    }
+
+    if (ioctl(uinp_fd, UI_DEV_CREATE))//注册设备
+    {
+        return -21;
+    }
+
+    return 0;
+}
+
 void MSRV_MSD6A648_TOUCH::start()
 {
+    int uinp_ret = create_virtual_input_device();
+    if(uinp_ret<0)
+    {
+        HHT_LOG_ERROR("create virtual input device return: %d\n",uinp_ret);
+    }
     string  default_device = DEFAULT_DEVICE;
     const char *uart_tty_device = default_device.data();
 
@@ -376,15 +571,6 @@ int MSRV_MSD6A648_TOUCH::check_incoming_data(uint8_t *rvbuf, int len)
 void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
 {
     //梳理从HID接收到的数据,通过串口发送一帧数据给MCU
-#if 0
-     Report_touch_info *m_info =get_report_info(rvbuf,len);
-     transfer_report_info_to_uart(m_info);
-     if (m_info != NULL) //必须释放先前开辟的内存空间
-     {
-         free(m_info);
-         m_info = NULL;
-     }
-#else
     Report_touch_info *m_info = get_report_info(rvbuf, len);
     trans_point_data *m_data ;
     m_data = (struct _trans_point_data*)malloc(sizeof(struct _trans_point_data));
@@ -407,6 +593,9 @@ void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
             }
     }
 #endif
+
+    bool m_touch_down_flag = true ;
+    bool m_all_touch_up_flag = true;
     //m_data->type = defTypeTouch;
     m_data->type = TYPE_TOUCH;
     m_data->npt = g_points ;//触摸点个数
@@ -440,20 +629,38 @@ void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
         m_data->un_data.touch.item[i].h = m_info->m_touch_points[i].touch_height;
         m_data->un_data.touch.item[i].p = 0;
         m_data->un_data.touch.item[i].r = 0;
+
+        //处理Android触摸请求
+        report_info_to_android(&(m_info->m_touch_points[i]),&m_touch_down_flag);
+        if(m_touch_down_flag==true)
+        {
+            m_all_touch_up_flag = false;
+        }
 #if 1
         //HHT_LOG_DEBUG("------------->hht_point[%d]: %04x %04x %04x %04x %04x %04x %04x %04x\n", i, m_data->un_data.touch.item[i].status,
         //              m_data->un_data.touch.item[i].penid, m_data->un_data.touch.item[i].x_ops, m_data->un_data.touch.item[i].y_ops,
         //              m_data->un_data.touch.item[i].w, m_data->un_data.touch.item[i].h, m_data->un_data.touch.item[i].p, m_data->un_data.touch.item[i].r);
-#else
-        HHT_LOG_DEBUG("------------->hht_point[%d]: 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x 0x%04x\n", i, m_info->m_touch_points[i].touch_status,
-                    m_info->m_touch_points[i].touch_id,m_info->m_touch_points[i].touch_xpos, m_info->m_touch_points[i].touch_ypos,
-                    m_info->m_touch_points[i].touch_width, m_info->m_touch_points[i].touch_height, m_data->un_data.touch.item[i].p, m_data->un_data.touch.item[i].r);
 #endif
     }
     HHT_LOG_DEBUG("***************************************************************************************\n");
+
+    //同步上报给Android的所有上报点
+    #if 1
+    // SYN_REPORT
+    if(m_all_touch_up_flag==true)
+    {
+		send_mt_abs_touch_figner_up_event((int)0xffffffff,0,0);
+        HHT_LOG_DEBUG("++++++++++++Android all figner up+++++++++++++++++\n");
+		//send_mt_abs_stylus_up_event((int)0xffffffff,0,0);
+    }
+    struct input_event event;
+	memset(&event, 0, sizeof(event));
+	gettimeofday(&event.time, NULL);
+	report_sync_event(uinp_fd, SYN_REPORT, &event.time);
+
     //发送数据给串口
     trans_hht_touch_w_h_pos(*m_data);
-
+    #endif
     if (m_data != NULL) //必须释放先前开辟的内存空间
     {
         free(m_data);
@@ -465,8 +672,8 @@ void MSRV_MSD6A648_TOUCH::handle_incoming_data(uint8_t *rvbuf, int len)
         m_info =NULL;
     }
     g_points = 0;//发送完立即清零
-#endif
-     return;
+    
+    return;
 }
 
 Report_touch_info *MSRV_MSD6A648_TOUCH::get_report_info(uint8_t *rvbuf, int len)
@@ -496,9 +703,6 @@ Report_touch_info *MSRV_MSD6A648_TOUCH::get_report_info(uint8_t *rvbuf, int len)
     memcpy(m_report->reserved,&rvbuf[10*(i)+2],2);
 
     //HHT_LOG_DEBUG("\n====>report->reserved:[0x%04x 0x%04x]\n", rvbuf[10*(i)+2], rvbuf[10*(i)+3]);
-#else
-    
-
 #endif
     return m_report;
 }
@@ -519,6 +723,45 @@ void MSRV_MSD6A648_TOUCH::write_sndbuf_to_uart(const char *Byte, int num)
     {
         //HHT_LOG_ERROR("===>error info-2;write_sndbuf_to_uart;uart_tty_fd=%d\n", uart_tty_fd);
     }
+}
+
+void MSRV_MSD6A648_TOUCH::report_info_to_android(Touch_point_info *info,bool *touch_down_flag)//上报触摸数据至Android
+{
+    if(info !=NULL)
+    {
+        switch(info->touch_status)
+        {
+            case 0x07://down
+            {
+                #if 1
+                //坐标转换
+                //DoCalibration(&(info->touch_xpos),&(info->touch_ypos));//Android上报原始点，禁止转换
+                send_mt_abs_touch_figner_down_event((int)info->touch_id,(int)info->touch_xpos,(int)info->touch_ypos);
+                #else
+                send_mt_abs_touch_figner_down_event((int)info->touch_id,(int)info->touch_xpos,(int)info->touch_ypos);
+                #endif
+                *touch_down_flag = true;
+                HHT_LOG_DEBUG("===>Android Touch down...\n");
+                break;
+            }
+            case 0x04://up
+            {
+                #if 0
+                //坐标转换
+                DoCalibration(&(info->touch_xpos),&(info->touch_ypos));
+                send_mt_abs_touch_figner_up_event((int)info->touch_id,(int)info->touch_xpos,(int)info->touch_ypos);
+                #else
+                //send_mt_abs_touch_figner_up_event((int)info->touch_id,(int)info->touch_xpos,(int)info->touch_ypos);
+                #endif
+                *touch_down_flag = false;
+                HHT_LOG_DEBUG("===>Android Touch up...\n");
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    return ;
 }
 
 bool iseven = true;
@@ -567,7 +810,6 @@ bool MSRV_MSD6A648_TOUCH::trans_hht_touch_w_h_pos(trans_point_data frame)
 	{
 		pt = &frame.un_data.touch.item[i];
 		//
-
 		//sprintf((char*)buf,"%2d %2d %5d %5d;",pt->penid, pt->status, pt->x, pt->y);
 		//write_sndbuf_to_uart((U8*)buf, strlen((char*)buf));
 
@@ -586,10 +828,14 @@ bool MSRV_MSD6A648_TOUCH::trans_hht_touch_w_h_pos(trans_point_data frame)
 		//	,__FILE__,__func__,__LINE__,defTouchPanelHht,m_touch_panel_type);
 		if (defTouchPanelHht == m_touch_panel_type)
 		{
+            #if 0
 			uart_w_h_pt.x = pt->x_ops;
-			uart_w_h_pt.y = pt->y_ops;
-			//printf("rdl_pos_002;%s;%s;%d;x_a=%d;x=%d\n"
-			//,__FILE__,__func__,__LINE__,pt->x_android,pt->x);
+			uart_w_h_pt.y = (pt->y_ops);
+            #else//富创坐标转换函数
+            uart_w_h_pt.x = pt->x_ops;
+			uart_w_h_pt.y = (pt->y_ops);
+            DoCalibration(&uart_w_h_pt.x,&uart_w_h_pt.y);
+            #endif
 		}
 		//ruandelu 20151010 IR flat frog bgn
 		//ruandelu 20151103 touch position ops only 1/4
@@ -624,8 +870,8 @@ bool MSRV_MSD6A648_TOUCH::trans_hht_touch_w_h_pos(trans_point_data frame)
 		//ruandelu 20150826 ops coords end
 #endif
 		//ruandelu 20170205 w/h not transfer bgn
-		uart_w_h_pt.w=pt->w;
-		uart_w_h_pt.h=pt->h;
+		//uart_w_h_pt.w=pt->w;
+		//uart_w_h_pt.h=pt->h;
 		//ruandelu 20170205 w/h not transfer end
 
 		//HHT_LOG_DEBUG("%s;%s;%d;status=%d;id=%d;x=%d;y=%d\n",__FILE__,__func__,__LINE__
@@ -1075,4 +1321,259 @@ int MSRV_MSD6A648_TOUCH::uart_write(int fd, const char *data, int len)
 int MSRV_MSD6A648_TOUCH::uart_close(int fd)
 {
     return close(fd);
+}
+
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_key_down_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+	
+#if 1	//20171117修订
+	report_key_event(uinp_fd, BTN_TOUCH, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 1, &event.time);
+	report_abs_event(uinp_fd, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER, &event.time);
+	
+    report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+#endif
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_key_up_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+	
+#if 1	//20171117修订
+    report_key_event(uinp_fd, BTN_TOUCH, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 0, &event.time);
+
+    //report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+ #endif
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_figner_down_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+#if 1	//20171117修订
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 1, &event.time);
+	report_abs_event(uinp_fd, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER, &event.time);
+	
+	report_key_event(uinp_fd, BTN_TOUCH, 1, &event.time);
+	report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+#endif
+
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_figner_up_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+	
+#if 1 	//20171117修订
+	report_key_event(uinp_fd, BTN_TOUCH, 0, &event.time);
+    report_key_event(uinp_fd, BTN_TOOL_FINGER, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+
+    //report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 0, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 0, &event.time);
+
+    //report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+#endif
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_pen_down_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+#if 1	//20171117修订
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 1, &event.time);
+    report_key_event(uinp_fd, BTN_TOOL_PEN, 1, &event.time);
+	report_key_event(uinp_fd, BTN_TOUCH, 1, &event.time);
+	report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+#endif
+
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_pen_up_event(int pos_id,int xpos,int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+#if 1  //20171117修订
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+	
+    //report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 0, &event.time);
+    //report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 0, &event.time);
+	report_key_event(uinp_fd, BTN_TOUCH, 0, &event.time);
+    report_key_event(uinp_fd, BTN_TOOL_PEN, 0, &event.time);
+#endif
+
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_stylus_down_event(int pos_id,int xpos,int ypos)//STYLUS
+{
+	struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+	report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 1, &event.time);
+	report_abs_event(uinp_fd, ABS_MT_TOOL_TYPE, MT_TOOL_PEN, &event.time);
+	report_key_event(uinp_fd, BTN_TOUCH, 1, &event.time);
+	report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+}
+void MSRV_MSD6A648_TOUCH::send_mt_abs_stylus_up_event(int pos_id,int xpos,int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+	report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+	report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 0, &event.time);
+	
+	report_key_event(uinp_fd, BTN_TOUCH, 0, &event.time);
+    report_abs_event(uinp_fd,ABS_MT_TOOL_TYPE, 0, &event.time);
+	report_abs_event(uinp_fd,MT_TOOL_PEN, 0, &event.time);
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_rubber_down_event(int pos_id, int xpos, int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+#if 1	//20171117修订
+    report_key_event(uinp_fd, BTN_TOUCH, 1, &event.time);
+    report_key_event(uinp_fd, BTN_STYLUS, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+
+    report_key_event(uinp_fd, BTN_TOOL_RUBBER, 1, &event.time);
+    report_key_event(uinp_fd, ABS_MISC, 1, &event.time);
+    report_key_event(uinp_fd, MSC_SERIAL, 1, &event.time);
+
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 1, &event.time);
+#endif
+
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_touch_rubber_up_event(int pos_id,int xpos,int ypos)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+#if 1	//20171117修订
+    report_key_event(uinp_fd, BTN_TOUCH, 0, &event.time);
+    report_key_event(uinp_fd, BTN_STYLUS, 0, &event.time);
+    report_key_event(uinp_fd, BTN_TOOL_RUBBER, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, xpos, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, ypos, &event.time);
+    report_key_event(uinp_fd, MSC_SERIAL, 0, &event.time);
+
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 0, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MINOR, 0, &event.time);
+#endif
+
+}
+
+void MSRV_MSD6A648_TOUCH::send_mt_abs_event(int pos_id, int abs_x, int abs_y)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    gettimeofday(&event.time, NULL);
+
+    report_abs_event(uinp_fd, ABS_MT_TRACKING_ID, pos_id, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_TOUCH_MAJOR, 1, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_X, abs_x, &event.time);
+    report_abs_event(uinp_fd, ABS_MT_POSITION_Y, abs_y, &event.time);
+
+	report_sync_event(uinp_fd, SYN_MT_REPORT, &event.time);
+}
+
+int MSRV_MSD6A648_TOUCH::report_key_event(int fd, unsigned short code, int pressed, timeval *time)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    event.time.tv_sec=time->tv_sec;
+    event.time.tv_usec=time->tv_usec;
+    event.type = EV_KEY;//EV_KEY;
+    event.code = code;
+    event.value = !!pressed;
+    return (write(fd, &event, sizeof(event)));
+}
+
+int MSRV_MSD6A648_TOUCH::report_rel_event(int fd, unsigned short code, int value, timeval *time)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    event.time.tv_sec=time->tv_sec;
+    event.time.tv_usec=time->tv_usec;
+    event.type = EV_REL;
+    event.code = code;
+    event.value = value;
+    return (write(fd, &event, sizeof(event)));
+}
+
+int MSRV_MSD6A648_TOUCH::report_abs_event(int fd, unsigned short code, int value, timeval *time)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    event.time.tv_sec=time->tv_sec;
+    event.time.tv_usec=time->tv_usec;
+    event.type = EV_ABS;
+    event.code = code;
+    event.value = value;
+    return (write(fd, &event, sizeof(event)));
+}
+
+int MSRV_MSD6A648_TOUCH::report_sync_event(int fd, int code, timeval *time)
+{
+    struct input_event event;
+    memset(&event, 0, sizeof(event));
+    event.time.tv_sec=time->tv_sec;
+    event.time.tv_usec=time->tv_usec;
+    event.type = EV_SYN;
+    event.code = code;
+    event.value = 0;
+    return (write(fd, &event, sizeof(event)));
 }

@@ -69,8 +69,8 @@ typedef struct __attribute__((packed)) _uart_touch_w_h_pt
     unsigned short y;
 
     //ruandelu 20170205 w/h not transfer bgn
-    unsigned short w;
-    unsigned short h;
+    //unsigned short w;
+    //unsigned short h;
     //ruandelu 20170205 w/h not transfer end
 
     //unsigned char radius;

@@ -9,7 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
-
+#include <linux/types.h>
+#include <linux/input.h>  
+#include <linux/uinput.h>  
+#include <linux/hidraw.h>
 /* According to earlier standards */
 #include <sys/time.h>
 #include <sys/types.h>
@@ -31,6 +34,11 @@ using namespace std;
 #include "ffprotocol_info.h"
 #include "commands_def.h"
 #include "hid-tp-coords-ops.h"
+#define CUSTOM_CALIBRATION {4096,0,0, 0,4123,-34}  
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef signed short s16;
+typedef signed long long s64;
 //************************************************************************************************
 #define DBG_UART_PRT   1
 
@@ -92,6 +100,10 @@ public:
     void sleep_ms(unsigned int msec);
     int m_strlen(uint8_t *s);
     static void signal_handler(int sig);
+
+    u8 DoCalibration(u16 *xvalue, u16 *yvalue);
+    // 创建虚拟输入设备
+    int create_virtual_input_device(void);
     //***********************************************************
     //termios操作
     void show_termios(const struct termios *s);
@@ -139,6 +151,31 @@ public:
     void write_sndbuf_to_uart(const char *Byte, int num);
     bool trans_hht_touch_w_h_pos(trans_point_data frame);
     //******************************************************************
+    void report_info_to_android(Touch_point_info *info,bool *touch_down_flag);//上报触摸数据至Android
+    //触摸输入
+    #if 1
+    //按键
+    void send_mt_abs_touch_key_down_event(int pos_id, int xpos, int ypos);
+    void send_mt_abs_touch_key_up_event(int pos_id, int xpos, int ypos);
+    //手指
+    void send_mt_abs_touch_figner_down_event(int pos_id, int xpos, int ypos);
+    void send_mt_abs_touch_figner_up_event(int pos_id, int xpos, int ypos);
+    //笔
+    void send_mt_abs_touch_pen_down_event(int pos_id, int xpos, int ypos);
+    void send_mt_abs_touch_pen_up_event(int pos_id,int xpos,int ypos);
+	//STYLUS
+    void send_mt_abs_stylus_down_event(int pos_id,int xpos,int ypos);
+    void send_mt_abs_stylus_up_event(int pos_id,int xpos,int ypos);
+    //橡皮擦
+    void send_mt_abs_touch_rubber_down_event(int pos_id, int xpos, int ypos);
+    void send_mt_abs_touch_rubber_up_event(int pos_id,int xpos,int ypos);
+
+    void send_mt_abs_event(int pos_id, int abs_x, int abs_y);
+    int report_key_event(int fd, unsigned short code, int pressed, timeval *time);
+    int report_rel_event(int fd, unsigned short code, int value, timeval *time);
+    int report_abs_event(int fd, unsigned short code, int value, timeval *time);
+    int report_sync_event(int fd, int code, timeval *time);
+#endif
     //外部调用启动接口
     void start();
 private:
