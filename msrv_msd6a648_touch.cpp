@@ -102,7 +102,8 @@ u8 MSRV_MSD6A648_TOUCH::DoCalibration(u16 *xvalue, u16 *yvalue)
 {
     u16 X,Y;
     s64 X_X,Y_Y;
-    u16 k16[] = CUSTOM_CALIBRATION; 
+    //u16 k16[] = CUSTOM_CALIBRATION; 
+    s16 k16[] = CUSTOM_CALIBRATION; 
 
     X = *xvalue;
     Y = *yvalue;
@@ -140,19 +141,15 @@ int MSRV_MSD6A648_TOUCH::create_virtual_input_device(void)
     uinp.id.product=0x0003;
     uinp.id.bustype = BUS_VIRTUAL;
 
-    //uinp.absmax[ABS_X] =0x7671;
     uinp.absmax[ABS_X] =0x7fff;
     uinp.absmin[ABS_X] = 0;
-    //uinp.absmax[ABS_Y] = 0x429f;
     uinp.absmax[ABS_Y] = 0x7fff;
     uinp.absmin[ABS_Y] = 0;
     uinp.absmax[ABS_PRESSURE]= 15000;
     uinp.absmin[ABS_PRESSURE]= 0;
 
-    //uinp.absmax[ABS_MT_POSITION_X] = 0x7671;
     uinp.absmax[ABS_MT_POSITION_X] = 0x7fff;
     uinp.absmin[ABS_MT_POSITION_X] = 0;
-    //uinp.absmax[ABS_MT_POSITION_Y] = 0x429f;
     uinp.absmax[ABS_MT_POSITION_Y] = 0x7fff;
     uinp.absmin[ABS_MT_POSITION_Y] = 0;
     uinp.absmax[ABS_MT_TRACKING_ID] = 0xFFFF;
